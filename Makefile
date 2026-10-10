@@ -13,7 +13,7 @@ vet:
 	go vet ./...
 
 lint:
-	golangci-lint run ./...
+	golangci-lint run ./... --fix
 
 fmt:
 	gofmt -w .
