@@ -301,11 +301,11 @@ func fetchSKUs(c *Clients, _ scw.Region, zones []scw.Zone) ([]Row, error) {
 func fmtAvailability(a instance.ServerTypesAvailability) string {
 	switch a {
 	case instance.ServerTypesAvailabilityAvailable:
-		return "✓"
+		return "🟢"
 	case instance.ServerTypesAvailabilityScarce:
-		return "low"
+		return "🟠"
 	case instance.ServerTypesAvailabilityShortage:
-		return "out"
+		return "🔴"
 	default:
 		return "—"
 	}
@@ -447,7 +447,11 @@ func fmtRAM(bytes uint64) string {
 	const gib = 1024 * 1024 * 1024
 	const mib = 1024 * 1024
 	if bytes >= gib {
-		return fmt.Sprintf("%.1f GiB", float64(bytes)/float64(gib))
+		gb := float64(bytes) / float64(gib)
+		if gb == float64(uint64(gb)) {
+			return fmt.Sprintf("%d GiB", uint64(gb))
+		}
+		return fmt.Sprintf("%.1f GiB", gb)
 	}
 	return fmt.Sprintf("%.0f MiB", float64(bytes)/float64(mib))
 }

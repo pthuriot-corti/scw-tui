@@ -444,7 +444,7 @@ func (a *App) firstAvailableZone(cols []string) string {
 	offset := 5 // name, arch, CPUs, RAM, GPU
 	for i, z := range a.skuZones {
 		idx := offset + i
-		if idx < len(cols) && (cols[idx] == "✓" || cols[idx] == "low") {
+		if idx < len(cols) && (cols[idx] == "🟢" || cols[idx] == "🟠") {
 			return z.String()
 		}
 	}

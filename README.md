@@ -33,25 +33,25 @@ A `config.json` file in the working directory controls TUI behavior:
 }
 ```
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `refreshIntervalSeconds` | `5` | Auto-refresh interval in seconds |
-| `defaultRegion` | `fr-par` | Default region for SKU availability view |
-| `accentColor` | `#8344E5` | Accent color (hex) for headers, first column, highlights |
+| Field                    | Default   | Description                                              |
+| ------------------------ | --------- | -------------------------------------------------------- |
+| `refreshIntervalSeconds` | `5`       | Auto-refresh interval in seconds                         |
+| `defaultRegion`          | `fr-par`  | Default region for SKU availability view                 |
+| `accentColor`            | `#8344E5` | Accent color (hex) for headers, first column, highlights |
 
 ## Keybindings
 
-| Key | Action |
-|-----|--------|
-| `1`–`6` | Switch resource: instances, images, buckets, load balancers, gateways, SKUs |
-| `Tab` / `Shift+Tab` | Cycle to next/previous resource |
-| `r` | Refresh current view |
-| `p` | Select project filter (k9s-style context switcher) |
-| `R` | Select region for SKU availability view (only in SKUs view) |
-| `S` | Select column to sort by |
-| `/` | Search/filter rows (incremental, Enter to apply, Escape to cancel) |
-| `Enter` | Show detail for selected row |
-| `q` | Quit |
+| Key                 | Action                                                                      |
+| ------------------- | --------------------------------------------------------------------------- |
+| `1`–`6`             | Switch resource: instances, images, buckets, load balancers, gateways, SKUs |
+| `Tab` / `Shift+Tab` | Cycle to next/previous resource                                             |
+| `r`                 | Refresh current view                                                        |
+| `p`                 | Select project filter (k9s-style context switcher)                          |
+| `R`                 | Select region for SKU availability view (only in SKUs view)                 |
+| `S`                 | Select column to sort by                                                    |
+| `/`                 | Search/filter rows (incremental, Enter to apply, Escape to cancel)          |
+| `Enter`             | Show detail for selected row                                                |
+| `q`                 | Quit                                                                        |
 
 ## Resources
 
