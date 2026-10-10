@@ -802,6 +802,13 @@ func TestFetchSKUDetail(t *testing.T) {
 	monthlyPrice := float32(10.0)
 	ms := newMockServer(t)
 	ms.on("/instance/v1/zones/", func(r *http.Request) (any, error) {
+		if strings.HasSuffix(r.URL.Path, "/products/servers/availability") {
+			return instance.GetServerTypesAvailabilityResponse{
+				Servers: map[string]*instance.GetServerTypesAvailabilityResponseAvailability{
+					"DEV1-S": {Availability: instance.ServerTypesAvailabilityAvailable},
+				},
+			}, nil
+		}
 		return instance.ListServersTypesResponse{
 			Servers: map[string]*instance.ServerType{
 				"DEV1-S": {
@@ -819,34 +826,48 @@ func TestFetchSKUDetail(t *testing.T) {
 	})
 
 	c := newMockClients(t, ms, scw.RegionFrPar)
-	detail, err := fetchSKUDetail(c, "DEV1-S", "fr-par-1")
+	detail, err := fetchSKUDetail(c, "DEV1-S")
 	if err != nil {
 		t.Fatalf("fetchSKUDetail: %v", err)
 	}
-	if len(detail) == 0 {
-		t.Fatal("got empty detail")
+	if len(detail.Specs) == 0 {
+		t.Fatal("got empty specs")
 	}
-	// Check key fields present.
-	expectContains := []string{
+	expectSpecs := []string{
 		"Name: DEV1-S",
-		"SKU: dev1-s",
 		"CPUs: 2",
 		"RAM: 4 GiB",
-		"Hourly Price: €0.0100",
-		"Monthly Price: €10.00",
 		"GPUs: 1",
 		"End of Service: true",
 	}
-	for _, want := range expectContains {
+	for _, want := range expectSpecs {
 		found := false
-		for _, d := range detail {
-			if d == want {
+		for _, s := range detail.Specs {
+			if s == want {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("detail missing %q; got: %v", want, detail)
+			t.Errorf("specs missing %q; got: %v", want, detail.Specs)
+		}
+	}
+
+	if len(detail.ZoneRows) != len(scw.AllZones) {
+		t.Fatalf("got %d zone rows, want %d", len(detail.ZoneRows), len(scw.AllZones))
+	}
+	for _, row := range detail.ZoneRows {
+		if len(row) != 4 {
+			t.Errorf("zone row has %d cols, want 4: %v", len(row), row)
+		}
+		if row[1] != "€0.0100" {
+			t.Errorf("hourly price for %s = %q, want €0.0100", row[0], row[1])
+		}
+		if row[2] != "€10.00" {
+			t.Errorf("monthly price for %s = %q, want €10.00", row[0], row[2])
+		}
+		if row[3] != "🟢" {
+			t.Errorf("availability for %s = %q, want 🟢", row[0], row[3])
 		}
 	}
 }
@@ -858,7 +879,7 @@ func TestFetchSKUDetailNotFound(t *testing.T) {
 	})
 
 	c := newMockClients(t, ms, scw.RegionFrPar)
-	_, err := fetchSKUDetail(c, "nonexistent-type", "fr-par-1")
+	_, err := fetchSKUDetail(c, "nonexistent-type")
 	if err == nil {
 		t.Error("fetchSKUDetail with missing type: expected error")
 	}

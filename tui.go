@@ -45,9 +45,7 @@ type App struct {
 	searchFilter string // active search text, "" = no filter
 	searchBar    *tview.InputField
 	// SKU detail state
-	skuDetailType string   // current detail server type name
-	skuDetailZone string   // current detail zone
-	skuDetailCols []string // row columns for per-zone availability
+	skuDetailType string // current detail server type name
 
 	stopAutoRefresh chan struct{}
 }
@@ -148,6 +146,11 @@ func (a *App) setKeybindings() {
 					a.showRegionSelector()
 				}
 				return nil
+			case 'A':
+				if a.kind == KindSKUs {
+					a.showAllAvailability()
+				}
+				return nil
 			case 'S':
 				a.showSortSelector()
 				return nil
@@ -226,7 +229,7 @@ func (a *App) refresh() {
 			} else {
 				a.renderTable()
 			}
-			a.setStatus(accentBoldTag+"%s[-] [white]|[-] %s%s: %d items — [white]1[-] skus [white]2[-] instances [white]3[-] images [white]4[-] buckets [white]5[-] lbs [white]6[-] gateways — [white]p[-] project [white]R[-] region [white]S[-] sort [white]/[-] search [white]r[-] refresh [white]Tab[-] next [white]Enter[-] detail [white]q[-] quit",
+			a.setStatus(accentBoldTag+"%s[-] [white]|[-] %s%s: %d items — [white]1[-] skus [white]2[-] instances [white]3[-] images [white]4[-] buckets [white]5[-] lbs [white]6[-] gateways — [white]p[-] project [white]R[-] region [white]A[-] all zones [white]S[-] sort [white]/[-] search [white]r[-] refresh [white]Tab[-] next [white]Enter[-] detail [white]q[-] quit",
 				a.projectLabel(), a.kind, a.skuRegionSuffix(), len(a.rows))
 		})
 	}()
@@ -484,22 +487,6 @@ func (a *App) skuRegionSuffix() string {
 	return " [" + string(a.skuRegion) + "]"
 }
 
-// firstAvailableZone returns the first zone where the SKU is available or low stock.
-func (a *App) firstAvailableZone(cols []string) string {
-	offset := 5 // name, arch, CPUs, RAM, GPU
-	for i, z := range a.skuZones {
-		idx := offset + i
-		if idx < len(cols) && (cols[idx] == "🟢" || cols[idx] == "🟠") {
-			return z.String()
-		}
-	}
-	// Fallback: use first zone even if out of stock (specs are still available).
-	if len(a.skuZones) > 0 && len(cols) > offset {
-		return a.skuZones[0].String()
-	}
-	return ""
-}
-
 func (a *App) showDetail() {
 	row, _ := a.table.GetSelection()
 	if row < 1 || row > len(a.rows) {
@@ -509,13 +496,8 @@ func (a *App) showDetail() {
 
 	// SKUs: fetch full specs from the API for the detail view.
 	if a.kind == KindSKUs {
-		zone := a.firstAvailableZone(r.Cols)
-		if zone == "" {
-			a.setStatus("[red]no zone available for this SKU[-]")
-			return
-		}
-		a.skuDetailCols = r.Cols
-		a.showSKUDetail(r.Cols[0], zone)
+		a.skuDetailType = r.Cols[0]
+		a.showSKUDetail(r.Cols[0])
 	}
 
 	// Instances: fetch full server details via GetServer API.
@@ -559,12 +541,11 @@ func (a *App) showInstanceDetail(serverID, zone string) {
 	}()
 }
 
-func (a *App) showSKUDetail(typeName, zone string) {
+func (a *App) showSKUDetail(typeName string) {
 	a.skuDetailType = typeName
-	a.skuDetailZone = zone
 	a.setStatus("loading specs for %s...", typeName)
 	go func() {
-		specs, err := fetchSKUDetail(a.clients, typeName, zone)
+		detail, err := fetchSKUDetail(a.clients, typeName)
 		a.view.QueueUpdateDraw(func() {
 			if err != nil {
 				a.setStatus("[red]error: %s[-]", err)
@@ -572,7 +553,7 @@ func (a *App) showSKUDetail(typeName, zone string) {
 			}
 			var sb strings.Builder
 			fmt.Fprintf(&sb, accentBoldTag+"SERVER TYPE: %s[-]\n\n", typeName)
-			for _, s := range specs {
+			for _, s := range detail.Specs {
 				parts := strings.SplitN(s, ": ", 2)
 				label := parts[0] + ":"
 				val := ""
@@ -581,101 +562,14 @@ func (a *App) showSKUDetail(typeName, zone string) {
 				}
 				fmt.Fprintf(&sb, "  [cyan]%-20s[-] %s\n", label, val)
 			}
-			sb.WriteString(a.skuZoneHint())
-			a.showSKUDetailModal(sb.String())
+			sb.WriteString("\n" + accentBoldTag + "PRICING & AVAILABILITY[-]\n\n")
+			fmt.Fprintf(&sb, "  [cyan]%-10s %-12s %-12s %s[-]\n", "Zone", "Hourly", "Monthly", "Availability")
+			for _, row := range detail.ZoneRows {
+				fmt.Fprintf(&sb, "  %-10s %-12s %-12s %s\n", row[0], row[1], row[2], row[3])
+			}
+			a.showDetailModal(sb.String())
 		})
 	}()
-}
-
-// skuOfferedZones returns zones where the SKU is offered (not "—").
-func (a *App) skuOfferedZones() []scw.Zone {
-	const offset = 5 // name, arch, CPUs, RAM, GPU
-	var out []scw.Zone
-	for i, z := range a.skuZones {
-		idx := offset + i
-		if idx >= len(a.skuDetailCols) {
-			continue
-		}
-		cell := a.skuDetailCols[idx]
-		if cell != "—" {
-			out = append(out, z)
-		}
-	}
-	return out
-}
-
-// skuZoneHint returns footer text showing zone shortcuts for offered zones.
-func (a *App) skuZoneHint() string {
-	zones := a.skuOfferedZones()
-	if len(zones) == 0 {
-		return ""
-	}
-	var sb strings.Builder
-	sb.WriteString("\n[yellow]Switch zone:[-] ")
-	for i, z := range zones {
-		if i >= 3 {
-			break
-		}
-		marker := "  "
-		if z.String() == a.skuDetailZone {
-			marker = accentBoldTag
-		}
-		fmt.Fprintf(&sb, "%s[%d] %s[-]  ", marker, i+1, z.String())
-	}
-	return sb.String() + "\n"
-}
-
-// showSKUDetailModal renders SKU detail with zone switching via 1/2/3 keys.
-func (a *App) showSKUDetailModal(text string) {
-	textView := tview.NewTextView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft).
-		SetText(text)
-	textView.SetBorder(true).
-		SetBackgroundColor(tcell.Color236).
-		SetTitle(" Detail ")
-
-	closeBtn := tview.NewButton("Close").
-		SetSelectedFunc(func() {
-			a.view.SetRoot(a.layout, true).SetFocus(a.table)
-		})
-	closeBtn.SetBackgroundColor(tcell.Color236)
-
-	flex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(textView, 0, 1, false).
-		AddItem(closeBtn, 1, 0, true)
-
-	closeDetail := func() {
-		a.view.SetRoot(a.layout, true).SetFocus(a.table)
-	}
-	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEsc:
-			closeDetail()
-			return nil
-		case tcell.KeyRune:
-			r := event.Rune()
-			if r == 'q' {
-				closeDetail()
-				return nil
-			}
-			if r >= '1' && r <= '3' {
-				offered := a.skuOfferedZones()
-				idx := int(r - '1')
-				if idx < len(offered) {
-					newZone := offered[idx].String()
-					if newZone != a.skuDetailZone {
-						a.showSKUDetail(a.skuDetailType, newZone)
-					}
-				}
-				return nil
-			}
-		}
-		return event
-	})
-
-	a.view.SetRoot(flex, true).SetFocus(closeBtn)
 }
 
 func (a *App) showDetailModal(text string) {
@@ -865,4 +759,96 @@ func (a *App) showRegionSelector() {
 		AddItem(tview.NewBox(), 0, 1, false)
 
 	a.view.SetRoot(flex, true).SetFocus(list)
+}
+
+// availabilityColor returns a tcell color for an availability emoji.
+func availabilityColor(s string) tcell.Color {
+	switch s {
+	case "🟢":
+		return tcell.ColorGreen
+	case "🟠":
+		return tcell.ColorOrange
+	case "🔴":
+		return tcell.ColorRed
+	default:
+		return tcell.ColorGray
+	}
+}
+
+// showAllAvailability opens a table of all SKUs × all zones availability.
+func (a *App) showAllAvailability() {
+	a.setStatus("loading availability for all zones...")
+	go func() {
+		rows, err := fetchSKUs(a.clients, a.skuRegion, scw.AllZones)
+		a.view.QueueUpdateDraw(func() {
+			if err != nil {
+				a.setStatus("[red]error: %s[-]", err)
+				return
+			}
+			sort.SliceStable(rows, func(i, j int) bool {
+				return rows[i].Cols[0] < rows[j].Cols[0]
+			})
+			table := tview.NewTable().
+				SetFixed(1, 1).
+				SetSelectable(true, false).
+				SetSeparator(tview.Borders.Vertical)
+			table.SetBackgroundColor(tcell.ColorDefault)
+			table.SetTitle(" All Zones Availability ")
+			table.SetTitleAlign(tview.AlignLeft)
+
+			zones := scw.AllZones
+			// Header row.
+			table.SetCell(0, 0, tview.NewTableCell(" Name ").
+				SetTextColor(accentColor).
+				SetAttributes(tcell.AttrBold).
+				SetSelectable(false))
+			for i, z := range zones {
+				table.SetCell(0, i+1, tview.NewTableCell(" "+z.String()+" ").
+					SetTextColor(accentColor).
+					SetAttributes(tcell.AttrBold).
+					SetSelectable(false))
+			}
+			// Data rows.
+			for r, row := range rows {
+				name := row.Cols[0]
+				table.SetCell(r+1, 0, tview.NewTableCell(" "+name+" ").
+					SetTextColor(accentColor).
+					SetSelectable(false))
+				for i := range zones {
+					idx := 5 + i
+					val := "—"
+					if idx < len(row.Cols) {
+						val = row.Cols[idx]
+					}
+					table.SetCell(r+1, i+1, tview.NewTableCell(" "+val+" ").
+						SetTextColor(availabilityColor(val)).
+						SetAlign(tview.AlignCenter))
+				}
+			}
+
+			closeFn := func() {
+				a.view.SetRoot(a.layout, true).SetFocus(a.table)
+			}
+			table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+				switch event.Key() {
+				case tcell.KeyEsc:
+					closeFn()
+					return nil
+				case tcell.KeyRune:
+					if event.Rune() == 'q' {
+						closeFn()
+						return nil
+					}
+				}
+				return event
+			})
+
+			flex := tview.NewFlex().
+				SetDirection(tview.FlexRow).
+				AddItem(table, 0, 1, true).
+				AddItem(a.status, 1, 0, false)
+			a.view.SetRoot(flex, true).SetFocus(table)
+			a.setStatus(accentBoldTag+"all zones availability[-] — %d SKUs × %d zones — [white]Esc[-] close", len(rows), len(zones))
+		})
+	}()
 }

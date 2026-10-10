@@ -456,56 +456,110 @@ func fmtRAM(bytes uint64) string {
 	return fmt.Sprintf("%.0f MiB", float64(bytes)/float64(mib))
 }
 
-// fetchSKUDetail fetches specs for a specific server type in a zone.
-func fetchSKUDetail(c *Clients, typeName, zoneStr string) ([]string, error) {
-	zone := scw.Zone(zoneStr)
-	resp, err := c.instance.ListServersTypes(&instance.ListServersTypesRequest{Zone: zone}, scw.WithAllPages())
-	if err != nil {
-		return nil, fmt.Errorf("list server types: %w", err)
-	}
-	st, ok := resp.Servers[typeName]
-	if !ok {
-		return nil, fmt.Errorf("server type %s not found in %s", typeName, zone)
+// SKUDetail holds specs (top section) and per-zone price/availability rows.
+type SKUDetail struct {
+	Specs    []string
+	ZoneRows [][]string // Zone, Hourly, Monthly, Availability
+}
+
+// fetchSKUDetail fetches specs and per-zone pricing/availability for a server type across all zones.
+func fetchSKUDetail(c *Clients, typeName string) (*SKUDetail, error) {
+	type zoneResult struct {
+		st           *instance.ServerType
+		availability instance.ServerTypesAvailability
+		err          error
 	}
 
-	detail := []string{
-		"Name: " + typeName,
-		"Zone: " + zoneStr,
-		"SKU: " + st.Sku,
-		"Arch: " + string(st.Arch),
-		"CPUs: " + fmt.Sprintf("%d", st.Ncpus),
-		"RAM: " + fmtRAM(st.RAM),
-		"Hourly Price: " + fmt.Sprintf("€%.4f", st.HourlyPrice),
+	zones := scw.AllZones
+	results := make([]zoneResult, len(zones))
+	var wg sync.WaitGroup
+	wg.Add(len(zones))
+	for i, zone := range zones {
+		go func(i int, zone scw.Zone) {
+			defer wg.Done()
+			typesResp, err := c.instance.ListServersTypes(&instance.ListServersTypesRequest{Zone: zone}, scw.WithAllPages())
+			if err != nil {
+				results[i] = zoneResult{err: err}
+				return
+			}
+			st, ok := typesResp.Servers[typeName]
+			if !ok {
+				results[i] = zoneResult{err: fmt.Errorf("not found in %s", zone)}
+				return
+			}
+			availResp, err := c.instance.GetServerTypesAvailability(&instance.GetServerTypesAvailabilityRequest{Zone: zone}, scw.WithAllPages())
+			if err != nil {
+				results[i] = zoneResult{st: st}
+				return
+			}
+			avail := instance.ServerTypesAvailability("")
+			if a, ok := availResp.Servers[typeName]; ok {
+				avail = a.Availability
+			}
+			results[i] = zoneResult{st: st, availability: avail}
+		}(i, zone)
 	}
-	if st.MonthlyPrice != nil {
-		detail = append(detail, "Monthly Price: "+fmt.Sprintf("€%.2f", *st.MonthlyPrice))
-	}
-	if st.Gpu != nil && *st.Gpu > 0 {
-		detail = append(detail, "GPUs: "+fmt.Sprintf("%d", *st.Gpu))
-		if st.GpuInfo != nil {
-			detail = append(detail, "GPU Model: "+st.GpuInfo.GpuManufacturer+" "+st.GpuInfo.GpuName)
-			detail = append(detail, "GPU Memory: "+fmtRAM(uint64(st.GpuInfo.GpuMemory)))
+	wg.Wait()
+
+	// Build specs from first available ServerType.
+	var specs []string
+	for _, zr := range results {
+		if zr.st != nil {
+			st := zr.st
+			specs = []string{
+				"Name: " + typeName,
+				"Arch: " + string(st.Arch),
+				"CPUs: " + fmt.Sprintf("%d", st.Ncpus),
+				"RAM: " + fmtRAM(st.RAM),
+			}
+			if st.Gpu != nil && *st.Gpu > 0 {
+				specs = append(specs, "GPUs: "+fmt.Sprintf("%d", *st.Gpu))
+				if st.GpuInfo != nil {
+					specs = append(specs, "GPU Model: "+st.GpuInfo.GpuManufacturer+" "+st.GpuInfo.GpuName)
+					specs = append(specs, "GPU Memory: "+fmtRAM(uint64(st.GpuInfo.GpuMemory)))
+				}
+			}
+			if st.Network != nil {
+				if st.Network.SumInternalBandwidth != nil {
+					specs = append(specs, "Internal Bandwidth: "+fmtBandwidth(*st.Network.SumInternalBandwidth))
+				}
+				if st.Network.SumInternetBandwidth != nil {
+					specs = append(specs, "Internet Bandwidth: "+fmtBandwidth(*st.Network.SumInternetBandwidth))
+				}
+				specs = append(specs, "IPv6 Support: "+fmt.Sprintf("%v", st.Network.IPv6Support))
+			}
+			if st.Capabilities != nil {
+				if st.Capabilities.BlockStorage != nil {
+					specs = append(specs, "Block Storage: "+fmt.Sprintf("%v", *st.Capabilities.BlockStorage))
+				}
+				specs = append(specs, "Max File Systems: "+fmt.Sprintf("%d", st.Capabilities.MaxFileSystems))
+			}
+			if st.EndOfService {
+				specs = append(specs, "End of Service: true")
+			}
+			break
 		}
 	}
-	if st.Network != nil {
-		if st.Network.SumInternalBandwidth != nil {
-			detail = append(detail, "Internal Bandwidth: "+fmtBandwidth(*st.Network.SumInternalBandwidth))
-		}
-		if st.Network.SumInternetBandwidth != nil {
-			detail = append(detail, "Internet Bandwidth: "+fmtBandwidth(*st.Network.SumInternetBandwidth))
-		}
-		detail = append(detail, "IPv6 Support: "+fmt.Sprintf("%v", st.Network.IPv6Support))
+	if specs == nil {
+		return nil, fmt.Errorf("server type %s not found in any zone", typeName)
 	}
-	if st.Capabilities != nil {
-		if st.Capabilities.BlockStorage != nil {
-			detail = append(detail, "Block Storage: "+fmt.Sprintf("%v", *st.Capabilities.BlockStorage))
+
+	var zoneRows [][]string
+	for i, zr := range results {
+		zone := zones[i].String()
+		if zr.err != nil || zr.st == nil {
+			zoneRows = append(zoneRows, []string{zone, "—", "—", "—"})
+			continue
 		}
-		detail = append(detail, "Max File Systems: "+fmt.Sprintf("%d", st.Capabilities.MaxFileSystems))
+		hourly := fmt.Sprintf("€%.4f", zr.st.HourlyPrice)
+		monthly := "—"
+		if zr.st.MonthlyPrice != nil {
+			monthly = fmt.Sprintf("€%.2f", *zr.st.MonthlyPrice)
+		}
+		zoneRows = append(zoneRows, []string{zone, hourly, monthly, fmtAvailability(zr.availability)})
 	}
-	if st.EndOfService {
-		detail = append(detail, "End of Service: true")
-	}
-	return detail, nil
+
+	return &SKUDetail{Specs: specs, ZoneRows: zoneRows}, nil
 }
 
 func fmtBandwidth(bps uint64) string {
