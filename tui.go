@@ -37,7 +37,7 @@ type App struct {
 	skuRegion scw.Region // region for SKU availability view
 	skuZones  []scw.Zone // zones in current SKU region
 
-	sortCol int // column index to sort by, -1 = none
+	sortCols map[ResourceKind]int // per-kind sort column, -1 = none
 
 	// Search state
 	allRows         []Row  // unfiltered rows before search
@@ -61,7 +61,7 @@ func newApp(clients *Clients, cfg Config) *App {
 		clients:         clients,
 		config:          cfg,
 		skuRegion:       scw.Region(cfg.DefaultRegion),
-		sortCol:         0, // sort by name (column 0) by default
+		sortCols:        make(map[ResourceKind]int),
 		stopAutoRefresh: make(chan struct{}),
 	}
 	a.skuZones = a.skuRegion.GetZones()
@@ -283,20 +283,58 @@ func (a *App) renderTable() {
 	a.table.SetTitle(fmt.Sprintf(" %s %s ", strings.ToUpper(a.kind.String()), a.skuTitleSuffix()))
 }
 
-// sortRows sorts a.rows by a.sortCol if set. Toggling re-sorts ascending/descending.
+// sortColumn returns the sort column for the current kind (-1 = none).
+func (a *App) sortColumn() int {
+	if c, ok := a.sortCols[a.kind]; ok {
+		return c
+	}
+	return 0
+}
+
+// sortRows sorts a.rows by sort column if set. Numeric prefixes compared numerically.
 func (a *App) sortRows() {
-	if a.sortCol < 0 || a.sortCol >= len(a.skuHeader()) {
+	col := a.sortColumn()
+	if col < 0 || col >= len(a.skuHeader()) {
 		return
 	}
-	col := a.sortCol
 	sort.SliceStable(a.rows, func(i, j int) bool {
-		return a.rows[i].Cols[col] < a.rows[j].Cols[col]
+		return cellLess(a.rows[i].Cols[col], a.rows[j].Cols[col])
 	})
+}
+
+// cellLess compares two cell strings, numeric prefix first, then lexicographic.
+func cellLess(a, b string) bool {
+	na, okA := parseNumPrefix(a)
+	nb, okB := parseNumPrefix(b)
+	if okA && okB {
+		if na != nb {
+			return na < nb
+		}
+	}
+	return a < b
+}
+
+// parseNumPrefix extracts a leading number (int or float) from a cell string.
+func parseNumPrefix(s string) (float64, bool) {
+	s = strings.TrimLeft(s, " ")
+	i := 0
+	for i < len(s) && (s[i] == '.' || (s[i] >= '0' && s[i] <= '9')) {
+		i++
+	}
+	if i == 0 {
+		return 0, false
+	}
+	n, err := strconv.ParseFloat(s[:i], 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // showSortSelector opens a list dialog to pick which column to sort by.
 func (a *App) showSortSelector() {
 	header := a.skuHeader()
+	cur := a.sortColumn()
 	list := tview.NewList().
 		ShowSecondaryText(false)
 	list.SetBorder(true).
@@ -304,7 +342,7 @@ func (a *App) showSortSelector() {
 		SetBackgroundColor(tcell.Color236)
 
 	list.AddItem(accentTag+"]No sort[-]", "", '0', func() {
-		a.sortCol = -1
+		a.sortCols[a.kind] = -1
 		a.view.SetRoot(a.layout, true).SetFocus(a.table)
 		a.renderTable()
 	})
@@ -312,7 +350,7 @@ func (a *App) showSortSelector() {
 	for i, h := range header {
 		idx := i
 		label := strings.ToUpper(h)
-		if idx == a.sortCol {
+		if idx == cur {
 			label = accentBoldTag + label + " (current)[-]"
 		}
 		runeKey := rune('a' + i)
@@ -320,7 +358,7 @@ func (a *App) showSortSelector() {
 			runeKey = 'z'
 		}
 		list.AddItem(label, "", runeKey, func() {
-			a.sortCol = idx
+			a.sortCols[a.kind] = idx
 			a.view.SetRoot(a.layout, true).SetFocus(a.table)
 			a.renderTable()
 		})
