@@ -19,7 +19,7 @@ var ctx = context.Background()
 
 // Clients holds all SDK API clients used by the TUI.
 type Clients struct {
-	scw               *scw.Client
+	scw                *scw.Client
 	account            *account.ProjectAPI
 	instance           *instance.API
 	lb                 *lb.API
@@ -72,10 +72,10 @@ func newClientsFromEnv() (*Clients, error) {
 func buildClients(client *scw.Client, profile *scw.Profile) (*Clients, error) {
 	c := &Clients{
 		scw:      client,
-		account:   account.NewProjectAPI(client),
-		instance:  instance.NewAPI(client),
-		lb:        lb.NewAPI(client),
-		vpcgw:     vpcgw.NewAPI(client),
+		account:  account.NewProjectAPI(client),
+		instance: instance.NewAPI(client),
+		lb:       lb.NewAPI(client),
+		vpcgw:    vpcgw.NewAPI(client),
 	}
 
 	// Determine region for S3 endpoint.

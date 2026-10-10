@@ -15,7 +15,6 @@ import (
 	"github.com/scaleway/scaleway-sdk-go/scw"
 )
 
-
 // Row is a generic table row: display columns + an ID for the resource.
 type Row struct {
 	ID   string
@@ -50,25 +49,6 @@ func (k ResourceKind) String() string {
 		return "skus"
 	default:
 		return "unknown"
-	}
-}
-
-func parseKind(s string) (ResourceKind, bool) {
-	switch strings.ToLower(s) {
-	case "instances", "instance", "servers":
-		return KindInstances, true
-	case "images", "image":
-		return KindImages, true
-	case "buckets", "bucket", "object", "objects", "storage":
-		return KindBuckets, true
-	case "loadbalancers", "lb", "lbs":
-		return KindLoadBalancers, true
-	case "gateways", "gateway", "vpcgw":
-		return KindGateways, true
-	case "skus", "sku", "server-types", "types":
-		return KindSKUs, true
-	default:
-		return 0, false
 	}
 }
 
@@ -244,7 +224,7 @@ func fetchBuckets(c *Clients, _ *string) ([]Row, error) {
 }
 
 // fetchSKUs lists instance server types with per-zone availability in the given region.
-func fetchSKUs(c *Clients, region scw.Region, zones []scw.Zone) ([]Row, error) {
+func fetchSKUs(c *Clients, _ scw.Region, zones []scw.Zone) ([]Row, error) {
 	type zoneResult struct {
 		types        map[string]*instance.ServerType
 		availability map[string]instance.ServerTypesAvailability

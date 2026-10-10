@@ -34,15 +34,15 @@ type App struct {
 	projects    []ProjectInfo
 
 	skuRegion scw.Region // region for SKU availability view
-	skuZones  []scw.Zone  // zones in current SKU region
+	skuZones  []scw.Zone // zones in current SKU region
 
 	sortCol int // column index to sort by, -1 = none
 
 	// Search state
-	allRows      []Row // unfiltered rows before search
-	searching    bool  // search bar is open
-	searchFilter string // active search text, "" = no filter
-	searchBar    *tview.InputField
+	allRows         []Row  // unfiltered rows before search
+	searching       bool   // search bar is open
+	searchFilter    string // active search text, "" = no filter
+	searchBar       *tview.InputField
 	stopAutoRefresh chan struct{}
 }
 
@@ -60,7 +60,7 @@ func newApp(clients *Clients, cfg Config) *App {
 		clients:         clients,
 		config:          cfg,
 		skuRegion:       scw.Region(cfg.DefaultRegion),
-		sortCol:          0, // sort by name (column 0) by default
+		sortCol:         0, // sort by name (column 0) by default
 		stopAutoRefresh: make(chan struct{}),
 	}
 	a.skuZones = a.skuRegion.GetZones()
@@ -219,7 +219,7 @@ func (a *App) refresh() {
 			} else {
 				a.renderTable()
 			}
-			a.setStatus(accentTag + "::b]%s[-] [white]|[-] %s%s: %d items — [white]1[-] instances [white]2[-] images [white]3[-] buckets [white]4[-] lbs [white]5[-] gateways [white]6[-] skus — [white]p[-] project [white]R[-] region [white]S[-] sort [white]/[-] search [white]r[-] refresh [white]Tab[-] next [white]Enter[-] detail [white]q[-] quit",
+			a.setStatus(accentTag+"::b]%s[-] [white]|[-] %s%s: %d items — [white]1[-] instances [white]2[-] images [white]3[-] buckets [white]4[-] lbs [white]5[-] gateways [white]6[-] skus — [white]p[-] project [white]R[-] region [white]S[-] sort [white]/[-] search [white]r[-] refresh [white]Tab[-] next [white]Enter[-] detail [white]q[-] quit",
 				a.projectLabel(), a.kind, a.skuRegionSuffix(), len(rows))
 		})
 	}()
@@ -301,7 +301,7 @@ func (a *App) showSortSelector() {
 		SetTitle(" Sort By Column ").
 		SetBackgroundColor(tcell.Color236)
 
-	list.AddItem(accentTag + "]No sort[-]", "", '0', func() {
+	list.AddItem(accentTag+"]No sort[-]", "", '0', func() {
 		a.sortCol = -1
 		a.view.SetRoot(a.layout, true).SetFocus(a.table)
 		a.renderTable()
@@ -480,11 +480,11 @@ func (a *App) showDetail() {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(accentTag + "::b]%s[-]\n\n", strings.ToUpper(a.kind.String())))
+	fmt.Fprintf(&sb, accentTag+"::b]%s[-]\n\n", strings.ToUpper(a.kind.String()))
 	header := a.kind.Header()
 	for i, h := range header {
 		if i < len(r.Cols) {
-			sb.WriteString(fmt.Sprintf("  [cyan]%-12s[-] %s\n", h+":", r.Cols[i]))
+			fmt.Fprintf(&sb, "  [cyan]%-12s[-] %s\n", h+":", r.Cols[i])
 		}
 	}
 	a.showDetailModal(sb.String())
@@ -499,7 +499,7 @@ func (a *App) showInstanceDetail(serverID, zone string) {
 				return
 			}
 			var sb strings.Builder
-			sb.WriteString(fmt.Sprintf(accentTag + "::b]INSTANCE: %s[-]\n\n", detail[0]))
+			fmt.Fprintf(&sb, accentTag+"::b]INSTANCE: %s[-]\n\n", detail[0])
 			for _, s := range detail[1:] {
 				parts := strings.SplitN(s, ": ", 2)
 				label := parts[0] + ":"
@@ -507,7 +507,7 @@ func (a *App) showInstanceDetail(serverID, zone string) {
 				if len(parts) > 1 {
 					val = parts[1]
 				}
-				sb.WriteString(fmt.Sprintf("  [cyan]%-20s[-] %s\n", label, val))
+				fmt.Fprintf(&sb, "  [cyan]%-20s[-] %s\n", label, val)
 			}
 			a.showDetailModal(sb.String())
 		})
@@ -524,7 +524,7 @@ func (a *App) showSKUDetail(typeName, zone string) {
 				return
 			}
 			var sb strings.Builder
-			sb.WriteString(fmt.Sprintf(accentTag + "::b]SERVER TYPE: %s[-]\n\n", typeName))
+			fmt.Fprintf(&sb, accentTag+"::b]SERVER TYPE: %s[-]\n\n", typeName)
 			for _, s := range specs {
 				parts := strings.SplitN(s, ": ", 2)
 				label := parts[0] + ":"
@@ -532,7 +532,7 @@ func (a *App) showSKUDetail(typeName, zone string) {
 				if len(parts) > 1 {
 					val = parts[1]
 				}
-				sb.WriteString(fmt.Sprintf("  [cyan]%-20s[-] %s\n", label, val))
+				fmt.Fprintf(&sb, "  [cyan]%-20s[-] %s\n", label, val)
 			}
 			a.showDetailModal(sb.String())
 		})
@@ -648,7 +648,7 @@ func (a *App) renderProjectSelector() {
 		SetBackgroundColor(tcell.Color236)
 
 	// "All projects" option first.
-	list.AddItem(accentTag + "]ALL PROJECTS[-]", "", 'a', func() {
+	list.AddItem(accentTag+"]ALL PROJECTS[-]", "", 'a', func() {
 		a.projectID = nil
 		a.projectName = ""
 		a.view.SetRoot(a.layout, true).SetFocus(a.table)

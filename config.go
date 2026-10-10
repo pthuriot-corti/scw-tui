@@ -11,8 +11,8 @@ import (
 // Config is the persistent TUI configuration loaded from config.json.
 type Config struct {
 	RefreshIntervalSeconds int    `json:"refreshIntervalSeconds"`
-	DefaultRegion           string `json:"defaultRegion"`
-	AccentColor             string `json:"accentColor"`
+	DefaultRegion          string `json:"defaultRegion"`
+	AccentColor            string `json:"accentColor"`
 }
 
 const defaultRefreshInterval = 5
@@ -20,8 +20,8 @@ const defaultRefreshInterval = 5
 func defaultConfig() Config {
 	return Config{
 		RefreshIntervalSeconds: defaultRefreshInterval,
-		DefaultRegion:           string(scw.RegionFrPar),
-		AccentColor:             "#8344E5",
+		DefaultRegion:          string(scw.RegionFrPar),
+		AccentColor:            "#8344E5",
 	}
 }
 
