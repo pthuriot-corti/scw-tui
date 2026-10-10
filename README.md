@@ -43,7 +43,7 @@ A `config.json` file in the working directory controls TUI behavior:
 
 | Key                 | Action                                                                      |
 | ------------------- | --------------------------------------------------------------------------- |
-| `1`–`6`             | Switch resource: instances, images, buckets, load balancers, gateways, SKUs |
+| `1`–`6`             | Switch resource: SKUs, instances, images, buckets, load balancers, gateways |
 | `Tab` / `Shift+Tab` | Cycle to next/previous resource                                             |
 | `r`                 | Refresh current view                                                        |
 | `p`                 | Select project filter (k9s-style context switcher)                          |
@@ -55,9 +55,9 @@ A `config.json` file in the working directory controls TUI behavior:
 
 ## Resources
 
+- **SKUs** — instance server types per region (name, arch, CPUs, RAM, GPU, availability per zone). `R` switches region, `Enter` shows full specs (price, GPU model, network bandwidth, capabilities, end-of-service).
 - **Instances** — server instances across all zones (ID, name, type, state, zone, IPs, created)
 - **Images** — instance images across all zones (ID, name, arch, state, public, zone, created)
 - **Buckets** — S3 object storage buckets (name, region, created)
 - **Load Balancers** — all LBs across all regions (ID, name, status, type, zone, IPs, frontend/backend counts, created)
 - **Public Gateways** — VPC gateways across all zones (ID, name, status, type, zone, IP, created)
-- **SKUs** — instance server types per region (name, arch, CPUs, RAM, GPU, availability per zone). `R` switches region, `Enter` shows full specs (price, GPU model, network bandwidth, capabilities, end-of-service).

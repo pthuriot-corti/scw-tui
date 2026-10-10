@@ -17,6 +17,7 @@ var accentColor = tcell.NewHexColor(0x8344E5)
 
 // accentTag is the tview color tag for the accent color.
 var accentTag = "[#8344E5]"
+var accentBoldTag = "[#8344E5::b]"
 
 // App holds the TUI state.
 type App struct {
@@ -47,12 +48,12 @@ type App struct {
 }
 
 var kindOrder = []ResourceKind{
+	KindSKUs,
 	KindInstances,
 	KindImages,
 	KindBuckets,
 	KindLoadBalancers,
 	KindGateways,
-	KindSKUs,
 }
 
 func newApp(clients *Clients, cfg Config) *App {
@@ -71,6 +72,7 @@ func newApp(clients *Clients, cfg Config) *App {
 		if v, err := strconv.ParseUint(hex, 16, 32); err == nil {
 			accentColor = tcell.NewHexColor(int32(v))
 			accentTag = "[#" + strings.ToUpper(hex) + "]"
+			accentBoldTag = "[#" + strings.ToUpper(hex) + "::b]"
 		}
 	}
 
@@ -219,8 +221,8 @@ func (a *App) refresh() {
 			} else {
 				a.renderTable()
 			}
-			a.setStatus(accentTag+"::b]%s[-] [white]|[-] %s%s: %d items — [white]1[-] instances [white]2[-] images [white]3[-] buckets [white]4[-] lbs [white]5[-] gateways [white]6[-] skus — [white]p[-] project [white]R[-] region [white]S[-] sort [white]/[-] search [white]r[-] refresh [white]Tab[-] next [white]Enter[-] detail [white]q[-] quit",
-				a.projectLabel(), a.kind, a.skuRegionSuffix(), len(rows))
+			a.setStatus(accentBoldTag+"%s[-] [white]|[-] %s%s: %d items — [white]1[-] skus [white]2[-] instances [white]3[-] images [white]4[-] buckets [white]5[-] lbs [white]6[-] gateways — [white]p[-] project [white]R[-] region [white]S[-] sort [white]/[-] search [white]r[-] refresh [white]Tab[-] next [white]Enter[-] detail [white]q[-] quit",
+				a.projectLabel(), a.kind, a.skuRegionSuffix(), len(a.rows))
 		})
 	}()
 }
@@ -311,7 +313,7 @@ func (a *App) showSortSelector() {
 		idx := i
 		label := strings.ToUpper(h)
 		if idx == a.sortCol {
-			label = accentTag + "::b]" + label + " (current)[-]"
+			label = accentBoldTag + label + " (current)[-]"
 		}
 		runeKey := rune('a' + i)
 		if runeKey > 'z' {
@@ -480,7 +482,7 @@ func (a *App) showDetail() {
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, accentTag+"::b]%s[-]\n\n", strings.ToUpper(a.kind.String()))
+	fmt.Fprintf(&sb, accentBoldTag+"%s[-]\n\n", strings.ToUpper(a.kind.String()))
 	header := a.kind.Header()
 	for i, h := range header {
 		if i < len(r.Cols) {
@@ -499,7 +501,7 @@ func (a *App) showInstanceDetail(serverID, zone string) {
 				return
 			}
 			var sb strings.Builder
-			fmt.Fprintf(&sb, accentTag+"::b]INSTANCE: %s[-]\n\n", detail[0])
+			fmt.Fprintf(&sb, accentBoldTag+"INSTANCE: %s[-]\n\n", detail[0])
 			for _, s := range detail[1:] {
 				parts := strings.SplitN(s, ": ", 2)
 				label := parts[0] + ":"
@@ -524,7 +526,7 @@ func (a *App) showSKUDetail(typeName, zone string) {
 				return
 			}
 			var sb strings.Builder
-			fmt.Fprintf(&sb, accentTag+"::b]SERVER TYPE: %s[-]\n\n", typeName)
+			fmt.Fprintf(&sb, accentBoldTag+"SERVER TYPE: %s[-]\n\n", typeName)
 			for _, s := range specs {
 				parts := strings.SplitN(s, ": ", 2)
 				label := parts[0] + ":"
@@ -584,7 +586,7 @@ func (a *App) setStatus(format string, args ...interface{}) {
 }
 
 func (a *App) run() error {
-	a.switchKind(KindInstances)
+	a.switchKind(KindSKUs)
 
 	// Start auto-refresh ticker in background.
 	go a.autoRefreshLoop()
@@ -698,7 +700,7 @@ func (a *App) showRegionSelector() {
 		region := region // capture
 		label := string(region)
 		if region == a.skuRegion {
-			label = accentTag + "::b]" + label + " (current)[-]"
+			label = accentBoldTag + label + " (current)[-]"
 		}
 		runeKey := rune('a' + i)
 		if runeKey > 'z' {
