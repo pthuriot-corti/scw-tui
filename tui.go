@@ -40,10 +40,15 @@ type App struct {
 	sortCols map[ResourceKind]int // per-kind sort column, -1 = none
 
 	// Search state
-	allRows         []Row  // unfiltered rows before search
-	searching       bool   // search bar is open
-	searchFilter    string // active search text, "" = no filter
-	searchBar       *tview.InputField
+	allRows      []Row  // unfiltered rows before search
+	searching    bool   // search bar is open
+	searchFilter string // active search text, "" = no filter
+	searchBar    *tview.InputField
+	// SKU detail state
+	skuDetailType string   // current detail server type name
+	skuDetailZone string   // current detail zone
+	skuDetailCols []string // row columns for per-zone availability
+
 	stopAutoRefresh chan struct{}
 }
 
@@ -509,8 +514,8 @@ func (a *App) showDetail() {
 			a.setStatus("[red]no zone available for this SKU[-]")
 			return
 		}
+		a.skuDetailCols = r.Cols
 		a.showSKUDetail(r.Cols[0], zone)
-		return
 	}
 
 	// Instances: fetch full server details via GetServer API.
@@ -555,6 +560,8 @@ func (a *App) showInstanceDetail(serverID, zone string) {
 }
 
 func (a *App) showSKUDetail(typeName, zone string) {
+	a.skuDetailType = typeName
+	a.skuDetailZone = zone
 	a.setStatus("loading specs for %s...", typeName)
 	go func() {
 		specs, err := fetchSKUDetail(a.clients, typeName, zone)
@@ -574,9 +581,101 @@ func (a *App) showSKUDetail(typeName, zone string) {
 				}
 				fmt.Fprintf(&sb, "  [cyan]%-20s[-] %s\n", label, val)
 			}
-			a.showDetailModal(sb.String())
+			sb.WriteString(a.skuZoneHint())
+			a.showSKUDetailModal(sb.String())
 		})
 	}()
+}
+
+// skuOfferedZones returns zones where the SKU is offered (not "—").
+func (a *App) skuOfferedZones() []scw.Zone {
+	const offset = 5 // name, arch, CPUs, RAM, GPU
+	var out []scw.Zone
+	for i, z := range a.skuZones {
+		idx := offset + i
+		if idx >= len(a.skuDetailCols) {
+			continue
+		}
+		cell := a.skuDetailCols[idx]
+		if cell != "—" {
+			out = append(out, z)
+		}
+	}
+	return out
+}
+
+// skuZoneHint returns footer text showing zone shortcuts for offered zones.
+func (a *App) skuZoneHint() string {
+	zones := a.skuOfferedZones()
+	if len(zones) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n[yellow]Switch zone:[-] ")
+	for i, z := range zones {
+		if i >= 3 {
+			break
+		}
+		marker := "  "
+		if z.String() == a.skuDetailZone {
+			marker = accentBoldTag
+		}
+		fmt.Fprintf(&sb, "%s[%d] %s[-]  ", marker, i+1, z.String())
+	}
+	return sb.String() + "\n"
+}
+
+// showSKUDetailModal renders SKU detail with zone switching via 1/2/3 keys.
+func (a *App) showSKUDetailModal(text string) {
+	textView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignLeft).
+		SetText(text)
+	textView.SetBorder(true).
+		SetBackgroundColor(tcell.Color236).
+		SetTitle(" Detail ")
+
+	closeBtn := tview.NewButton("Close").
+		SetSelectedFunc(func() {
+			a.view.SetRoot(a.layout, true).SetFocus(a.table)
+		})
+	closeBtn.SetBackgroundColor(tcell.Color236)
+
+	flex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(textView, 0, 1, false).
+		AddItem(closeBtn, 1, 0, true)
+
+	closeDetail := func() {
+		a.view.SetRoot(a.layout, true).SetFocus(a.table)
+	}
+	flex.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEsc:
+			closeDetail()
+			return nil
+		case tcell.KeyRune:
+			r := event.Rune()
+			if r == 'q' {
+				closeDetail()
+				return nil
+			}
+			if r >= '1' && r <= '3' {
+				offered := a.skuOfferedZones()
+				idx := int(r - '1')
+				if idx < len(offered) {
+					newZone := offered[idx].String()
+					if newZone != a.skuDetailZone {
+						a.showSKUDetail(a.skuDetailType, newZone)
+					}
+				}
+				return nil
+			}
+		}
+		return event
+	})
+
+	a.view.SetRoot(flex, true).SetFocus(closeBtn)
 }
 
 func (a *App) showDetailModal(text string) {
