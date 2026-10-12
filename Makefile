@@ -1,4 +1,4 @@
-.PHONY: build run test vet lint fmt check tidy
+.PHONY: build run test vet lint fmt check tidy install
 
 build:
 	go build -o scw-tui .
@@ -19,3 +19,6 @@ fmt:
 	gofmt -w .
 
 check: fmt vet lint test
+
+install: build
+	go install .
